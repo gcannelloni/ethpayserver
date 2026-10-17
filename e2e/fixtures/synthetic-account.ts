@@ -52,7 +52,7 @@ export async function registerSyntheticAccount(label: string): Promise<Synthetic
         algorithm: 'argon2id',
         memory_kb: 65_536,
         iterations: 3,
-        parallelism: 1,
+        parallelism: 4,
         salt: b64(16),
       },
       encrypted_symmetric_key: { ciphertext: b64(48), iv: b64(16), mac: b64(32) },
