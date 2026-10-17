@@ -24,9 +24,15 @@
  * leans on lives in `fixtures/synthetic-payment.ts` and is unit-tested in
  * `synthetic-payment-helpers.spec.ts`, which does run everywhere.
  *
- * Funds are recoverable. The store's xpub is `m/44'/60'/0'` of
- * `E2E_TEST_MNEMONIC`, so every address the server derives (`0/{index}`) is
- * spendable from the same mnemonic; the spender lives at a separate account
+ * A new merchant account per run, not just a new store. Billing limits settled
+ * volume per account over 30 days and this test settles real money nightly, so
+ * one shared account is refused invoice creation sooner or later - correctly.
+ * Nothing is exempted: the fresh account goes through the same enforcement as
+ * any merchant, it simply has nothing settled yet.
+ *
+ * Funds are recoverable. The store's xpub is `m/44'/60'/<run>'` of
+ * `E2E_TEST_MNEMONIC` (see `merchantPathFor`), so every address the server
+ * derives (`0/{index}`) is spendable from the same mnemonic; the spender lives at a separate account
  * index and is topped up from a faucet.
  */
 import { appendFileSync } from 'node:fs';
@@ -38,6 +44,7 @@ import { sepolia } from 'viem/chains';
 import { mnemonicToSeedSync } from '@scure/bip39';
 
 import { api, V4_UUID, wsUrl } from '../fixtures/api';
+import { registerSyntheticAccount } from '../fixtures/synthetic-account';
 import {
   expectRunSurvivedArchive,
   randomInvoiceAmountWei,
@@ -53,8 +60,17 @@ const ENABLED = process.env.E2E_SYNTHETIC_PAYMENT === 'true';
 // spec kept sending one for a day because it only runs on the nightly against
 // live testnet, never in PR CI.
 const CHAIN_ID = 'eip155:11155111';
-/** Account-level path the server expects an xpub at (`evm/src/wallet.rs`). */
-const MERCHANT_PATH = "m/44'/60'/0'";
+/**
+ * Account-level path the server expects an xpub at (`evm/src/wallet.rs`).
+ *
+ * The account index is the run's start in Unix seconds, not 0. Each run is a
+ * new merchant account, and a watched address is unique server-wide, so two
+ * runs sharing an xpub would be handed the same `0/{index}` addresses from a
+ * counter that restarts at 0. One second of resolution cannot repeat between
+ * runs, stays below the 2^31 hardened limit until 2038, and is recoverable from
+ * the store name's timestamp: `scripts/sweep-test-wallet.mjs --account <that>`.
+ */
+const merchantPathFor = (runStartedAt: number) => `m/44'/60'/${Math.floor(runStartedAt / 1000)}'`;
 /** Kept clear of account 0 so the spender never collides with a receive address. */
 const SPENDER_ACCOUNT_INDEX = 9;
 /**
@@ -383,12 +399,11 @@ test.describe('Synthetic payment (live testnet)', () => {
     const runStartedAt = Date.now();
 
     const mnemonic = requireEnv('E2E_TEST_MNEMONIC', 'BIP39 phrase for the merchant xpub + spender');
-    const token = requireEnv('E2E_API_TOKEN', 'API key (ak_...) that may create stores and invoices');
     const rpcUrl = requireEnv('E2E_SEPOLIA_RPC_URL', 'Sepolia RPC endpoint to broadcast from');
-    apiToken = token;
 
-    const merchantXpub = HDKey.fromMasterSeed(mnemonicToSeedSync(mnemonic)).derive(MERCHANT_PATH)
-      .publicExtendedKey;
+    const merchantXpub = HDKey.fromMasterSeed(mnemonicToSeedSync(mnemonic)).derive(
+      merchantPathFor(runStartedAt),
+    ).publicExtendedKey;
     const spender = mnemonicToAccount(mnemonic, { accountIndex: SPENDER_ACCOUNT_INDEX });
 
     const transport = http(rpcUrl);
@@ -459,7 +474,19 @@ test.describe('Synthetic payment (live testnet)', () => {
       // keep the name on the `e2e-synthetic-` prefix that
       // `scripts/sweep-e2e-stores.mjs` matches, so a run that dies before
       // cleanup is still findable.
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const stamp = new Date(runStartedAt).toISOString().replace(/[:.]/g, '-');
+
+      // A new merchant account per run, so the volume limit that refuses a
+      // long-lived account never sees this traffic accumulate - and nothing is
+      // exempted from it. The account cannot be deleted afterwards: the server
+      // refuses to delete an account that took a payment, by design, so it is
+      // left behind under the same `e2e-synthetic-` name as its store.
+      const account = await registerSyntheticAccount(`e2e-synthetic-${stamp}`);
+      const token = account.token;
+      // Published before anything else can throw, for the same reason as the
+      // store below.
+      apiToken = token;
+      console.log(`merchant account for this run: wallet ${account.address}`);
       const store = await api<{ id: string }>('/stores', {
         method: 'POST',
         token,

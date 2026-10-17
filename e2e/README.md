@@ -291,7 +291,7 @@ skipped money path is the gap this test exists to close.
 
 ```bash
 E2E_REMOTE=true E2E_SYNTHETIC_PAYMENT=true \
-E2E_TEST_MNEMONIC="..." E2E_API_TOKEN=ak_... E2E_SEPOLIA_RPC_URL=https://... \
+E2E_TEST_MNEMONIC="..." E2E_SEPOLIA_RPC_URL=https://... \
   npx playwright test tests/synthetic-payment.spec.ts
 ```
 
@@ -299,7 +299,6 @@ E2E_TEST_MNEMONIC="..." E2E_API_TOKEN=ak_... E2E_SEPOLIA_RPC_URL=https://... \
 |----------------------------|----------|--------------------------------------------------------------------|
 | `E2E_SYNTHETIC_PAYMENT`    | yes      | `true` to run the spec at all                                      |
 | `E2E_TEST_MNEMONIC`        | yes      | BIP39 phrase — merchant xpub **and** the spending wallet           |
-| `E2E_API_TOKEN`            | yes      | `server_admin` API key (`ak_...`) — creates the store and archives it afterward |
 | `E2E_SEPOLIA_RPC_URL`      | yes      | Sepolia RPC endpoint used to broadcast                             |
 | `E2E_WEBHOOK_PUBLIC_URL`   | no       | Skip the cloudflared quick tunnel and use this base URL instead    |
 | `E2E_WEBHOOK_PORT`         | no       | Bind the sink to a fixed port (pairs with the above)               |
@@ -313,7 +312,9 @@ E2E_TEST_MNEMONIC="..." E2E_API_TOKEN=ak_... E2E_SEPOLIA_RPC_URL=https://... \
 2. Fund the spending wallet at `m/44'/60'/9'/0/0` from a Sepolia faucet. The test
    prints the address and its balance on every run, and fails with that address
    when the balance hits zero.
-3. Create a user on testnet, mint an API key, store it as `E2E_API_TOKEN`.
+3. Nothing to create on testnet: each run registers its own merchant account
+   (wallet flow, no CAPTCHA) so the per-account volume limit never accumulates.
+   If the server turns CAPTCHA on, registration fails with that message.
 4. Store a Sepolia RPC endpoint as `E2E_SEPOLIA_RPC_URL`.
 5. Set `SENTRY_CRON_E2E_URL` to a Sentry Cron Monitor check-in URL. This is
    required, not optional, and the workflow enforces it — the check-in step
@@ -322,22 +323,24 @@ E2E_TEST_MNEMONIC="..." E2E_API_TOKEN=ak_... E2E_SEPOLIA_RPC_URL=https://... \
    failing one, nor a run that never happens at all ever reached a person,
    which is the whole thing the monitor exists to prevent.
 
-Nothing else needs provisioning: the test creates its own store, payment method
+Nothing else needs provisioning: the test creates its own account, store, payment method
 and webhook config on each run.
 
 ### Why the funds are not burned
 
-The store's xpub is `m/44'/60'/0'` of the same mnemonic, and the server derives
-payment addresses at `0/{index}` beneath it (`evm/src/wallet.rs`). Every address
-it pays into is therefore spendable from `E2E_TEST_MNEMONIC` at
-`m/44'/60'/0'/0/{index}` — the faucet ETH can be swept back to the spender rather
-than being stranded. The spender sits at account index 9 so it can never collide
+Each run's store xpub is `m/44'/60'/<run>'` of the same mnemonic, where `<run>`
+is the run's start in Unix seconds, and the server derives payment addresses at
+`0/{index}` beneath it (`evm/src/wallet.rs`). Every address it pays into is
+therefore spendable from `E2E_TEST_MNEMONIC` — the faucet ETH can be swept back
+to the spender with `node scripts/sweep-test-wallet.mjs --account <run>` rather
+than being stranded. Runs before the fresh-account change used account 0. The spender sits at account index 9 so it can never collide
 with a receive address.
 
 ### Deliberate non-cleanup
 
-Each run creates a fresh store (`e2e-synthetic-<timestamp>`) and leaves it
-behind. The derivation index advances per payment method, so reusing one store
+Each run creates a fresh merchant account and store (`e2e-synthetic-<timestamp>`).
+The account stays: the server refuses to delete one that took a payment.
+The store is archived by the run. The derivation index advances per payment method, so reusing one store
 would couple each run to the last; and on a failure the invoice and its payment
 rows are the evidence. Prune them by hand if testnet gets noisy.
 

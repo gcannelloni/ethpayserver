@@ -158,7 +158,6 @@ jobs:
         env:
           E2E_SYNTHETIC_PAYMENT: "true"
           E2E_TEST_MNEMONIC: ${{ secrets.E2E_TEST_MNEMONIC }}
-          E2E_API_TOKEN: ${{ secrets.E2E_API_TOKEN }}
           E2E_SEPOLIA_RPC_URL: ${{ secrets.E2E_SEPOLIA_RPC_URL }}
           # Base URL of the named tunnel started above, which forwards to
           # E2E_WEBHOOK_PORT. Unset falls back to a best-effort quick tunnel,

@@ -26,7 +26,7 @@
  * plenty, since gas is the only real burn.
  *
  *   E2E_TEST_MNEMONIC="..." E2E_SEPOLIA_RPC_URL="https://..." \
- *     node scripts/sweep-test-wallet.mjs [--scan 1000] [--execute]
+ *     node scripts/sweep-test-wallet.mjs [--scan 1000] [--account N] [--execute]
  *
  * Dry run by default: it prints what it would move and sends nothing. Pass
  * --execute to actually broadcast.
@@ -87,6 +87,17 @@ const args = process.argv.slice(2);
 const execute = args.includes('--execute');
 const scanIdx = args.indexOf('--scan');
 const scanCount = scanIdx >= 0 ? Number(args[scanIdx + 1]) : 1000;
+// Which merchant account's receive addresses to walk. The synthetic test pays
+// into a fresh merchant account every run, at account index = the run's start in
+// Unix seconds (the same instant as its `e2e-synthetic-<ISO>` store name), so a
+// run's funds sit at m/44'/60'/<that>'/0/{i}. Account 0 holds everything paid
+// before that change. Run once per account to recover.
+const accountIdx = args.indexOf('--account');
+const merchantAccount = accountIdx >= 0 ? Number(args[accountIdx + 1]) : 0;
+if (!Number.isInteger(merchantAccount) || merchantAccount < 0) {
+  console.error('--account must be a non-negative integer.');
+  process.exit(1);
+}
 const toIdx = args.indexOf('--to');
 const destinationArg = toIdx >= 0 ? args[toIdx + 1] : undefined;
 
@@ -154,7 +165,7 @@ console.log(execute ? 'MODE: execute\n' : 'MODE: dry run (pass --execute to broa
 // The addresses this script knows about: every derived receive address, plus
 // the spender when the wallet is being emptied.
 function accountAt(index) {
-  return mnemonicToAccount(mnemonic, { accountIndex: 0, changeIndex: 0, addressIndex: index });
+  return mnemonicToAccount(mnemonic, { accountIndex: merchantAccount, changeIndex: 0, addressIndex: index });
 }
 
 // ---------------------------------------------------------------- tokens ---
@@ -250,9 +261,9 @@ let swept = 0n;
 let moved = 0;
 
 for (let i = 0; i < scanCount; i++) {
-  // Matches the server's receive-address derivation: m/44'/60'/0'/0/{i}
+  // Matches the server's receive-address derivation: m/44'/60'/{account}'/0/{i}
   const account = mnemonicToAccount(mnemonic, {
-    accountIndex: 0,
+    accountIndex: merchantAccount,
     changeIndex: 0,
     addressIndex: i,
   });
