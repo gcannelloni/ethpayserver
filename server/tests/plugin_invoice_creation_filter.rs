@@ -495,3 +495,77 @@ async fn non_operator_api_key_row_is_still_filtered_through_the_real_extractor()
     };
     assert_eq!(body["error"].as_str(), Some("invoice_creation_blocked"));
 }
+
+/// The control for giving the synthetic payment test a fresh merchant account
+/// per run instead of exempting it.
+///
+/// A filter that judges by account - as a volume limit does - must refuse the
+/// account that is over its limit and must not refuse a new account beside it,
+/// through the same handler with the same filter installed. Both halves are
+/// needed: "the fresh account gets through" alone is also what a limit that
+/// has stopped applying looks like. Remove the filter stage from
+/// `create_invoice` and the first assertion goes red; make the filter refuse
+/// everyone and the second does.
+#[tokio::test]
+#[ignore]
+async fn an_over_limit_account_is_refused_while_a_new_account_beside_it_is_not() {
+    struct RefuseAccount(UserId);
+
+    #[async_trait]
+    impl InvoiceCreationFilter for RefuseAccount {
+        async fn filter_invoice_creation(
+            &self,
+            request: InvoiceCreationFilterRequest,
+        ) -> FilterVerdict {
+            if request.account_id == self.0 {
+                FilterVerdict::Deny {
+                    reason: "You have settled more than your plan allows in the last 30 days."
+                        .to_string(),
+                }
+            } else {
+                FilterVerdict::Allow
+            }
+        }
+    }
+
+    let pg = Arc::new(pg_service().await);
+    let over_limit = seed_user(pg.pool()).await;
+    let fresh = seed_user(pg.pool()).await;
+    let over_limit_store = Store::new(format!("store-{}", Uuid::new_v4()), UserId(over_limit));
+    let fresh_store = Store::new(format!("store-{}", Uuid::new_v4()), UserId(fresh));
+    pg.create_store_owned_by(&over_limit_store, UserId(over_limit))
+        .await
+        .expect("seed over-limit merchant's store");
+    pg.create_store_owned_by(&fresh_store, UserId(fresh))
+        .await
+        .expect("seed fresh merchant's store");
+
+    let filters: Vec<Arc<dyn InvoiceCreationFilter>> =
+        vec![Arc::new(RefuseAccount(UserId(over_limit)))];
+
+    let refused = create_invoice(
+        caller(over_limit),
+        State(app_state(pg.clone(), filters.clone())),
+        Json(invoice_request(over_limit_store.id.0)),
+    )
+    .await;
+    let Err((status, Json(body))) = refused else {
+        panic!("an over-limit merchant must still be refused invoice creation");
+    };
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "invoice_creation_blocked");
+
+    // Past the filter stage: the store has no payment method, which is the
+    // next thing `create_invoice` checks.
+    let admitted = create_invoice(
+        caller(fresh),
+        State(app_state(pg, filters)),
+        Json(invoice_request(fresh_store.id.0)),
+    )
+    .await;
+    let Err((status, Json(body))) = admitted else {
+        panic!("expected a failure past the filter stage (no wallet configured)");
+    };
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "no_payment_methods");
+}

@@ -333,14 +333,29 @@ is the run's start in Unix seconds, and the server derives payment addresses at
 `0/{index}` beneath it (`evm/src/wallet.rs`). Every address it pays into is
 therefore spendable from `E2E_TEST_MNEMONIC` — the faucet ETH can be swept back
 to the spender with `node scripts/sweep-test-wallet.mjs --account <run>` rather
-than being stranded. Runs before the fresh-account change used account 0. The spender sits at account index 9 so it can never collide
-with a receive address.
+than being stranded. Runs before the fresh-account change used account 0. The
+spender sits at account index 9 so it can never collide with a receive address.
+
+**Recovering faucet funds takes one sweep per run.** Each run prints
+`recover its funds with sweep-test-wallet.mjs --account <N>` in its log, and
+`<N>` is also the store name's timestamp as Unix seconds
+(`date -d 2026-10-18T09:38:00Z +%s`). Dry-run each (`--account <N>`), then add
+`--execute`. Run `--account 0` once for everything paid before the change.
 
 ### Deliberate non-cleanup
 
 Each run creates a fresh merchant account and store (`e2e-synthetic-<timestamp>`).
-The account stays: the server refuses to delete one that took a payment.
-The store is archived by the run. The derivation index advances per payment method, so reusing one store
+The store is archived by the run (in `afterEach`, pass or fail), but the
+account stays: `DELETE /admin/users/{id}` and `DELETE /users/me` both answer
+**409** ("This account's stores hold ... Deleting it would destroy that
+history, so it is refused", `server/src/api/admin/deletion/account.rs`) once a
+store has taken a payment, which every run does. The daily residue is therefore
+one wallet-only account named `e2e-synthetic-<timestamp>`, permanently, with no
+automated sweeper: `sweep-e2e-accounts.mjs` skips accounts that have a wallet
+address and the server would refuse them anyway. Accounts are tiny rows; an
+operator who minds can ask for a purge path that tolerates settled test
+history, but that is a server change, not a test one.
+The derivation index advances per payment method, so reusing one store
 would couple each run to the last; and on a failure the invoice and its payment
 rows are the evidence. Prune them by hand if testnet gets noisy.
 

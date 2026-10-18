@@ -486,7 +486,10 @@ test.describe('Synthetic payment (live testnet)', () => {
       // Published before anything else can throw, for the same reason as the
       // store below.
       apiToken = token;
-      console.log(`merchant account for this run: wallet ${account.address}`);
+      console.log(
+        `merchant account for this run: wallet ${account.address}; ` +
+          `recover its funds with sweep-test-wallet.mjs --account ${Math.floor(runStartedAt / 1000)}`,
+      );
       const store = await api<{ id: string }>('/stores', {
         method: 'POST',
         token,
