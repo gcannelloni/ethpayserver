@@ -272,7 +272,7 @@ jobs:
           # turn both off and let the guards do the job they were written for.
           set +e +o pipefail
 
-          CLIENT_REPO="randomcash/payserver-client"
+          CLIENT_REPO="gcannelloni/payserver-client"
           # Arbitrary but documented: past this many commits behind, e2e is
           # exercising a client build old enough that a shipped feature has no
           # coverage. Raise or lower it here if it fires too often or too
@@ -1021,7 +1021,7 @@ jobs:
           curl -sS --fail-with-body -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $RCS_DISPATCH_PAT" \
-            https://api.github.com/repos/randomcash/central-infrastructure/dispatches \
+            https://api.github.com/repos/gcannelloni/central-infrastructure/dispatches \
             -d "{\"event_type\":\"deploy-testnet\",\"client_payload\":{\"sha_tag\":\"$SHA_TAG\",\"sha\":\"$FULL_SHA\"}}"
           echo "dispatched deploy-testnet $SHA_TAG ($FULL_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
@@ -1073,7 +1073,7 @@ jobs:
           curl -sS --fail-with-body -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $RCS_DISPATCH_PAT" \
-            https://api.github.com/repos/randomcash/central-infrastructure/dispatches \
+            https://api.github.com/repos/gcannelloni/central-infrastructure/dispatches \
             -d '{"event_type": "deploy", "client_payload": {"service": "ethpayserver", "environment": "${{ steps.resolve.outputs.environment }}", "sha": "${{ github.sha }}", "tag": "${{ steps.resolve.outputs.tag }}"}}'
           echo "dispatched mainnet deploy ${{ steps.resolve.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
 

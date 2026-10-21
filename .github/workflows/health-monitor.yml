@@ -92,7 +92,7 @@ jobs:
     # be something a human turned on deliberately and can see is off. Skipping
     # on a missing secret is the silent no-op this PR removes elsewhere.
     #
-    #   gh variable set MAINNET_LIVE --body 1 --repo randomcash/ethpayserver
+    #   gh variable set MAINNET_LIVE --body 1 --repo gcannelloni/ethpayserver
     if: vars.MAINNET_LIVE == '1'
     runs-on: ubuntu-latest
     timeout-minutes: 5

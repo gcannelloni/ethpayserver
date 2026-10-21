@@ -4,7 +4,7 @@
 # from payserver-client via central-infrastructure. This pin exists so E2E runs
 # against a known frontend rather than a moving target.
 #
-# The frontend lives in its own repository (randomcash/payserver-client) and
+# The frontend lives in its own repository (gcannelloni/payserver-client) and
 # publishes its own image, so it no longer shares this repo's commit sha. This
 # file is the pin that replaces that coupling: an exact, immutable tag, moved
 # deliberately, reviewed like any other change.
@@ -16,7 +16,7 @@
 # moving at all.
 #
 # To move it: pick a tag from
-#   https://github.com/randomcash/payserver-client/pkgs/container/payserver-client
+#   https://github.com/gcannelloni/payserver-client/pkgs/container/payserver-client
 # and open a PR. CI pulls exactly this image for the E2E run, so a frontend that
 # breaks the payment flow fails here rather than on testnet.
 #

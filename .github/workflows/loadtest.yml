@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     # Skips forks, which have no access to the secrets. Whether the secrets
     # exist is checked by the first step: a job-level `if` cannot read them.
-    if: github.repository == 'randomcash/ethpayserver'
+    if: github.repository == 'gcannelloni/ethpayserver'
     steps:
       - name: Require load test configuration
         env:

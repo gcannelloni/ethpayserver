@@ -33,7 +33,7 @@ Two images are published per commit from this repository:
 | EVM monitor | `ghcr.io/randomcash/ethpayserver/evmmonitor:<tag>` |
 
 The checkout client used to be the third. It is now built and published by
-[payserver-client](https://github.com/randomcash/payserver-client), which serves
+[payserver-client](https://github.com/gcannelloni/payserver-client), which serves
 every payserver rather than this one. It is signed the same way but under **its
 own identity**, so the regexp differs:
 

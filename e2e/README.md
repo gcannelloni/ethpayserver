@@ -10,7 +10,7 @@ required to drive the passkey-based auth flow.
 
 Runs against a local backend and trunk dev server. Requires PostgreSQL with an
 `ethpayserver_e2e` database, and a checkout of
-[payserver-client](https://github.com/randomcash/payserver-client) — the
+[payserver-client](https://github.com/gcannelloni/payserver-client) — the
 frontend is its own repository now. A sibling directory is assumed; set
 `PAYSERVER_CLIENT_DIR` if yours is elsewhere.
 
@@ -50,7 +50,7 @@ Run at CI's `RATE_LIMIT_*=10000` and this stops being a variable at all.
 ## What is not here
 
 Layout regression tests moved to
-[payserver-client](https://github.com/randomcash/payserver-client) with the
+[payserver-client](https://github.com/gcannelloni/payserver-client) with the
 frontend. They inject `styles.css` into a blank page and assert computed style —
 no server, no auth — so they belong with the stylesheet they test, and a CSS
 specificity regression now fails the repository that owns the CSS instead of

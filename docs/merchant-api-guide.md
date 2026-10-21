@@ -946,7 +946,7 @@ ws.onmessage = (event) => {
 ## 9. Checkout: What the Customer Sees
 
 You are not required to build a payment UI. The companion
-[payserver-client](https://github.com/randomcash/payserver-client) ships a
+[payserver-client](https://github.com/gcannelloni/payserver-client) ships a
 hosted checkout page at `/checkout/{invoice_id}`; redirect your customer
 there. Its reference nginx setup proxies that page's data calls to the API's
 own `GET /api/checkout/{invoice_id}`, which strips to `GET /checkout/{invoice_id}`

@@ -12,7 +12,7 @@ given deployment actually runs on.
 
 ## Docs
 
-- [Merchant API Integration Guide](https://github.com/randomcash/ethpayserver/blob/main/docs/merchant-api-guide.md): The single page for integrating — authentication, store and wallet setup, payment methods, invoices, webhooks, checkout, error handling, and a full worked example. Read this first and in full before writing an integration; it is written to be complete on its own.
+- [Merchant API Integration Guide](https://github.com/gcannelloni/ethpayserver/blob/main/docs/merchant-api-guide.md): The single page for integrating — authentication, store and wallet setup, payment methods, invoices, webhooks, checkout, error handling, and a full worked example. Read this first and in full before writing an integration; it is written to be complete on its own.
 
 ## Machine-readable
 

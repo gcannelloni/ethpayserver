@@ -5,7 +5,7 @@
 **Please do not open a public issue for a security defect.**
 
 Use GitHub's private vulnerability reporting:
-**[Report a vulnerability](https://github.com/randomcash/ethpayserver/security/advisories/new)**
+**[Report a vulnerability](https://github.com/gcannelloni/ethpayserver/security/advisories/new)**
 
 That channel is private between you and the maintainers, and it creates a private
 fork where a fix can be developed and reviewed before anything is disclosed.

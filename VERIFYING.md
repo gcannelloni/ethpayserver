@@ -47,7 +47,7 @@ cosign verify \
 ```
 
 The checkout client is published from its own repository,
-[payserver-client](https://github.com/randomcash/payserver-client), and signed
+[payserver-client](https://github.com/gcannelloni/payserver-client), and signed
 the same way — note the different identity:
 
 ```sh

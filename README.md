@@ -31,7 +31,7 @@ ETHPayServer is a free, open-source payment processor that enables merchants to 
 
 ```bash
 # Clone the repository
-git clone git@github.com:randomcash/ethpayserver.git
+git clone git@github.com:gcannelloni/ethpayserver.git
 cd ethpayserver
 ```
 
@@ -240,7 +240,7 @@ ethpayserver/
 ```
 
 The web frontend is **not** here. It lives in
-[payserver-client](https://github.com/randomcash/payserver-client), because it
+[payserver-client](https://github.com/gcannelloni/payserver-client), because it
 is meant to serve every payserver — EVM, Tron, Solana, Monero — rather than this
 one. The image tag this server is **tested against** is pinned in
 `ops/client-image.pin`. That is not the tag serving production: the
@@ -259,7 +259,7 @@ the private deploy repository, so the two can drift.
 
 ### External Dependencies (payserver-commons)
 
-Shared libraries from [payserver-commons](https://github.com/randomcash/payserver-commons):
+Shared libraries from [payserver-commons](https://github.com/gcannelloni/payserver-commons):
 
 | Crate | Description |
 |-------|-------------|
@@ -271,7 +271,7 @@ Shared libraries from [payserver-commons](https://github.com/randomcash/payserve
 | `scrub` | Secret/PII redaction for error reports — see `evm::telemetry` |
 
 `ui-kit` is also published there but is not used here: it is Leptos components,
-consumed by [payserver-client](https://github.com/randomcash/payserver-client).
+consumed by [payserver-client](https://github.com/gcannelloni/payserver-client).
 
 #### Which version you build against
 
