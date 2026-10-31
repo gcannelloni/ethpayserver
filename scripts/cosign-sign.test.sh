@@ -5,53 +5,91 @@
 # error, not the digest guard that already passed - that distinction is the
 # whole reason this script exists, and nothing in normal CI operation
 # exercises cosign failing, so nothing organically proves it.
+#
+# The fake accepts any arguments, so it cannot tell us whether a flag is
+# valid. The replay cases below hand the recorded arguments to the real
+# pinned cosign, whose own argument validation then decides.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK="$HERE/cosign-sign.sh"
+NO_TLOG_CONFIG="$HERE/cosign-signing-config-no-tlog.json"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 FAKE_DIGEST="ghcr.io/agent8-cash/ethpayserver/evmmonitor@sha256:deadbeef"
 
 fail=0
 
-# A real cosign that signs successfully.
-cat > "$TMP/cosign" <<'EOF'
+# The real cosign, resolved before the fake goes on PATH. It must be the
+# version CI pins: a different version validates flags differently.
+REAL_COSIGN="$(command -v cosign || true)"
+if [ -z "$REAL_COSIGN" ] || ! "$REAL_COSIGN" version 2>/dev/null | grep -q 'GitVersion: *v3\.0\.6$'; then
+  echo "FAIL: the pinned cosign v3.0.6 is not on PATH, so the argument replay cannot run"; exit 1
+fi
+
+# Replays the arguments the last successful sign recorded against the real
+# pinned cosign. Cosign reports a bad flag before it parses the reference,
+# so reaching "could not parse reference" proves the flags were accepted.
+# The reference is deliberately unparseable-by-design: no registry is contacted.
+replay_against_pinned() {  # name
+  local out args=()
+  mapfile -t args < "$COSIGN_CALL_LOG"
+  out="$(timeout 60 "$REAL_COSIGN" "${args[@]}" 2>&1 </dev/null)"
+  if grep -qiE "not supported|unknown flag|deprecated|Error: --" <<<"$out"; then
+    echo "FAIL: pinned cosign rejected the arguments of $1 - args: ${args[*]} out: $out"; fail=1
+  elif ! grep -q "could not parse reference" <<<"$out"; then
+    echo "FAIL: pinned cosign did not get past argument validation for $1 - out: $out"; fail=1
+  else
+    echo "ok: pinned cosign accepts the arguments of $1"
+  fi
+}
+
+# A real cosign that signs successfully. One argument per line.
+cat > "$TMP/cosign" <<'EOF2'
 #!/usr/bin/env bash
-echo "$@" >> "$COSIGN_CALL_LOG"
+printf '%s\n' "$@" >> "$COSIGN_CALL_LOG"
 exit 0
-EOF
+EOF2
 chmod +x "$TMP/cosign"
 
 export COSIGN_CALL_LOG="$TMP/calls.log"
+
+# tlog_upload=false signs with the no-transparency-log config, and passes no
+# --tlog-upload flag: the pinned cosign refuses that flag with a signing config.
 : > "$COSIGN_CALL_LOG"
 if out="$(PATH="$TMP:$PATH" "$CHECK" monitor "$FAKE_DIGEST" false 2>&1)"; then
-  if grep -q -- "--tlog-upload=false" "$COSIGN_CALL_LOG" && grep -q -- "$FAKE_DIGEST" "$COSIGN_CALL_LOG"; then
-    echo "ok: a successful sign passes through tlog_upload=false and the digest"
+  if grep -qx -- "--signing-config" "$COSIGN_CALL_LOG" \
+    && grep -qx -- "$NO_TLOG_CONFIG" "$COSIGN_CALL_LOG" \
+    && grep -qx -- "$FAKE_DIGEST" "$COSIGN_CALL_LOG" \
+    && ! grep -q -- "--tlog-upload" "$COSIGN_CALL_LOG"; then
+    echo "ok: tlog_upload=false signs the digest with the no-tlog signing config and no --tlog-upload"
+    replay_against_pinned "tlog_upload=false"
   else
-    echo "FAIL: a successful sign did not pass tlog_upload=false and the digest - got: $(cat "$COSIGN_CALL_LOG")"; fail=1
+    echo "FAIL: tlog_upload=false did not pass the no-tlog signing config and the digest - got: $(cat "$COSIGN_CALL_LOG")"; fail=1
   fi
 else
   echo "FAIL: a successful cosign sign is reported as a failure - $out"; fail=1
 fi
 
+# tlog_upload=true (release tags) passes no transparency flag: v3 uploads by default.
 : > "$COSIGN_CALL_LOG"
 if out="$(PATH="$TMP:$PATH" "$CHECK" server "$FAKE_DIGEST" true 2>&1)"; then
-  if grep -q -- "--tlog-upload=true" "$COSIGN_CALL_LOG"; then
-    echo "ok: a release build passes through tlog_upload=true"
+  if grep -qx -- "$FAKE_DIGEST" "$COSIGN_CALL_LOG" && ! grep -q -- "--tlog-upload\|--signing-config" "$COSIGN_CALL_LOG"; then
+    echo "ok: tlog_upload=true signs the digest with no transparency flag or signing config"
+    replay_against_pinned "tlog_upload=true"
   else
-    echo "FAIL: tlog_upload=true was not passed through - got: $(cat "$COSIGN_CALL_LOG")"; fail=1
+    echo "FAIL: tlog_upload=true did not sign the digest with no transparency flag - got: $(cat "$COSIGN_CALL_LOG")"; fail=1
   fi
 else
   echo "FAIL: a successful cosign sign is reported as a failure - $out"; fail=1
 fi
 
 # A cosign that fails the way an unreachable transparency log does.
-cat > "$TMP/cosign" <<'EOF'
+cat > "$TMP/cosign" <<'EOF2'
 #!/usr/bin/env bash
 echo "Error: signing [...]: signing digest: signing bundle: error signing bundle" >&2
 exit 1
-EOF
+EOF2
 chmod +x "$TMP/cosign"
 
 out="$(PATH="$TMP:$PATH" "$CHECK" monitor "$FAKE_DIGEST" false 2>&1)"
@@ -66,7 +104,7 @@ else
   echo "ok: a signing failure's error names signing, not the digest"
 fi
 
-out="$(PATH="$TMP:$PATH" "$CHECK" server "" false 2>&1)"
+out="$(PATH="$TMP:$PATH" "$CHECK" server "" true 2>&1)"
 rc=$?
 if [ "$rc" -eq 0 ]; then
   echo "FAIL: an empty digest is accepted"; fail=1
