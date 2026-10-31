@@ -147,7 +147,7 @@ where
         .route("/{store_id}/wallet", get(stores::get_store_wallet::<A>))
         .route("/{store_id}/wallet", put(stores::configure_store_wallet::<A>))
         .route("/{store_id}/wallet", delete(stores::delete_store_wallet::<A>))
-        .route("/{store_id}/wallet/rotate", post(stores::rotate_store_wallet::<A>))
+        .route("/{store_id}/wallet/rotate", post(stores::rotate_store_wallet_audited::<A>))
         .route("/{store_id}/settings", get(stores::get_store_settings::<A>))
         .route("/{store_id}/settings", patch(stores::update_store_settings::<A>))
         .route("/{store_id}/webhook", get(stores::get_store_webhook::<A>))
@@ -299,6 +299,11 @@ where
         .route("/me/email", delete(users::remove_email::<A>))
         .route("/me/email/status", get(users::get_email_status::<A>))
         .route("/me/standing", get(users::get_standing::<A>))
+        // Owner-only read of a store's key-rotation history.
+        .route(
+            "/me/stores/{store_id}/wallet-rotations",
+            get(users::get_wallet_rotations::<A>),
+        )
         // Enrols the caller and creates an invoice: a POST, never a link.
         .route("/me/signup", post(users::signup::<A>))
         // Read-only: the plans a merchant may pass to `/me/signup`.

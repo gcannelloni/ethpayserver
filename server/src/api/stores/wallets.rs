@@ -19,6 +19,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -31,7 +32,9 @@ use data_service::{
 use evm::{XpubDeriver, looks_like_a_private_key, validate_xpub, xpub_depth_problem};
 use types::NAMESPACE_EIP155;
 
-use super::super::extractors::{AuthenticatedUser, StoreScopedUser, key_grants_store_permission};
+use super::super::extractors::{
+    AuthenticatedUser, FreshlyAuthenticatedUser, StoreScopedUser, key_grants_store_permission,
+};
 use super::{ApiErr, mask_xpub, repository_error, require_store_settings_permission};
 use crate::state::PgAppState;
 pub use api_types::{
@@ -887,4 +890,94 @@ where
         methods_rotated: rotations.len(),
         rotations,
     }))
+}
+
+/// Window over which rotation events are counted for the rate alert.
+const ROTATION_RATE_WINDOW_HOURS: i64 = 24;
+
+/// More rotation events than this in the window is an alert. A merchant
+/// rotating a key for a real compromise does it once; several in a day is
+/// either an incident or someone else holding the session.
+const ROTATION_RATE_THRESHOLD: i64 = 3;
+
+/// Reasons a completed rotation should alert. Empty when it is routine.
+/// `fresh` is whether the caller held a freshly-authenticated session.
+pub(crate) fn rotation_alerts(fresh: bool, events_in_window: i64) -> Vec<&'static str> {
+    let mut reasons = Vec::new();
+    if events_in_window > ROTATION_RATE_THRESHOLD {
+        reasons.push("rate");
+    }
+    if !fresh {
+        reasons.push("not_fresh");
+    }
+    reasons
+}
+
+/// `rotate_store_wallet`, plus the audit. The rotation is not refused for a
+/// stale session or a burst of rotations: the alert is the response, since a
+/// refusal would stop a merchant escaping a compromised key. Alerts go out as
+/// a counter (the alert rule lives in the monitoring service) and a warning
+/// that names the store and the reason, never the xpub.
+pub async fn rotate_store_wallet_audited<A>(
+    fresh: Result<FreshlyAuthenticatedUser, (StatusCode, &'static str)>,
+    scoped: StoreScopedUser,
+    State(state): State<PgAppState<A>>,
+    Path(store_id): Path<Uuid>,
+    Json(req): Json<RotateWalletRequest>,
+) -> Result<Json<RotateWalletResponse>, ApiErr>
+where
+    A: SessionService + 'static,
+{
+    let fresh = fresh.is_ok();
+    let response =
+        rotate_store_wallet(scoped, State(state.clone()), Path(store_id), Json(req)).await?;
+
+    // The rotation has already happened. A failed count must not turn that
+    // into an error, so it is logged and the rate check is skipped.
+    let since = Utc::now() - Duration::hours(ROTATION_RATE_WINDOW_HOURS);
+    let events = state
+        .data_service
+        .count_rotation_events_since(store_id, since)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!(error = %e, %store_id, "rotation rate count failed");
+            0
+        });
+
+    for reason in rotation_alerts(fresh, events) {
+        metrics::counter!("ethpayserver_wallet_rotation_alerts_total", "reason" => reason)
+            .increment(1);
+        tracing::warn!(%store_id, reason, events, "wallet rotation alert");
+    }
+
+    Ok(response)
+}
+
+#[cfg(test)]
+mod audit_tests {
+    use super::rotation_alerts;
+
+    #[test]
+    fn routine_rotation_from_a_fresh_session_raises_nothing() {
+        assert!(rotation_alerts(true, 1).is_empty());
+        assert!(
+            rotation_alerts(true, 3).is_empty(),
+            "the threshold itself is not over it"
+        );
+    }
+
+    #[test]
+    fn a_rotation_without_a_fresh_session_alerts() {
+        assert_eq!(rotation_alerts(false, 1), vec!["not_fresh"]);
+    }
+
+    #[test]
+    fn a_burst_of_rotations_alerts_on_rate() {
+        assert_eq!(rotation_alerts(true, 4), vec!["rate"]);
+    }
+
+    #[test]
+    fn both_conditions_report_both_reasons() {
+        assert_eq!(rotation_alerts(false, 4), vec!["rate", "not_fresh"]);
+    }
 }

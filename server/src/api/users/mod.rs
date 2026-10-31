@@ -13,6 +13,7 @@ pub(crate) mod email;
 mod key_material;
 pub(crate) mod signup;
 pub(crate) mod standing;
+pub(crate) mod wallet_rotations;
 pub(crate) mod wallets;
 
 pub use api_keys::{create_api_key, list_api_keys, revoke_api_key, rotate_api_key, update_api_key};
@@ -24,6 +25,7 @@ pub use email::{
 };
 pub use signup::{list_plans, signup};
 pub use standing::{StandingResponse, get_standing};
+pub use wallet_rotations::{WalletRotationEntry, get_wallet_rotations};
 pub use wallets::{
     PromoteWalletCredentialRequest, WalletCredentialResponse, WalletReauthChallengeResponse,
     create_wallet_reauth_challenge, list_wallet_credentials, set_primary_wallet_credential,

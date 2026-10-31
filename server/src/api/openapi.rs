@@ -82,6 +82,7 @@ use super::{
         users::api_keys::update_api_key,
         users::api_keys::rotate_api_key,
         users::standing::get_standing,
+        users::wallet_rotations::get_wallet_rotations,
         users::signup::signup,
         users::signup::list_plans,
         users::wallets::list_wallet_credentials,

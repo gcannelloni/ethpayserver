@@ -1202,6 +1202,92 @@ async fn rotating_a_store_records_no_rotation_from_a_key_to_itself() {
     );
 }
 
+/// The rate count counts rotation events, not the rows they write.
+///
+/// One store-wide rotation writes one row per method, all stamped with the same
+/// transaction time. Counting rows would read a single rotation over three
+/// methods as three, and trip the rate alert on a routine change.
+#[tokio::test]
+#[ignore]
+async fn rotation_rate_count_counts_events_not_method_rows() {
+    let service = create_test_service().await;
+    let xpub_a = unique_xpub("a");
+    let user = seed_user(&service).await;
+    let store = seed_store_for(&service, user).await;
+
+    for (chain, token, symbol) in [
+        (1u64, None, "ETH"),
+        (1, Some("0xtok"), "USDC"),
+        (137, None, "MATIC"),
+    ] {
+        StorePaymentMethodWriter::create_payment_method(
+            &service,
+            store,
+            &ChainId::evm(chain),
+            token,
+            symbol,
+            18,
+            Some(&xpub_a),
+        )
+        .await
+        .unwrap();
+    }
+
+    let wallet_a = WalletReader::resolve_store_wallet(&service, store, EVM)
+        .await
+        .unwrap()
+        .unwrap();
+    WalletWriter::set_store_wallet(&service, store, wallet_a.id)
+        .await
+        .unwrap();
+
+    let since = chrono::Utc::now() - chrono::Duration::hours(24);
+    assert_eq!(
+        service
+            .count_rotation_events_since(store, since)
+            .await
+            .unwrap(),
+        0,
+        "no rotation yet"
+    );
+
+    service
+        .rotate_store_xpub(store, EVM, &unique_xpub("b"), Some("first"))
+        .await
+        .expect("first rotation");
+    assert_eq!(
+        service
+            .count_rotation_events_since(store, since)
+            .await
+            .unwrap(),
+        1,
+        "one rotation over three methods is one event"
+    );
+
+    service
+        .rotate_store_xpub(store, EVM, &unique_xpub("c"), Some("second"))
+        .await
+        .expect("second rotation");
+    assert_eq!(
+        service
+            .count_rotation_events_since(store, since)
+            .await
+            .unwrap(),
+        2,
+        "two rotations are two events"
+    );
+
+    let after_both = chrono::Utc::now() + chrono::Duration::hours(1);
+    assert_eq!(
+        service
+            .count_rotation_events_since(store, after_both)
+            .await
+            .unwrap(),
+        0,
+        "the window is a lower bound on rotated_at"
+    );
+}
+
 /// Rotating one store does not move any other store on the account.
 ///
 /// A store with no override follows the account primary. Rotating it by

@@ -281,6 +281,25 @@ impl PgDataService {
             .collect())
     }
 
+    /// Distinct rotation events for a store since `since`. `rotated_at` is
+    /// `NOW()` per insert and one rotation writes one row per method inside a
+    /// single transaction, so distinct timestamps count events, not methods.
+    pub async fn count_rotation_events_since(
+        &self,
+        store_id: Uuid,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> RepositoryResult<i64> {
+        let row = sqlx::query(
+            "SELECT COUNT(DISTINCT rotated_at) AS n FROM wallet_rotations WHERE store_id = $1 AND rotated_at >= $2",
+        )
+        .bind(store_id)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(sqlx_to_repo_error)?;
+        Ok(row.get("n"))
+    }
+
     /// Get rotation history for a store.
     pub async fn get_rotation_history(
         &self,

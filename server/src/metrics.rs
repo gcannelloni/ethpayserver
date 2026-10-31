@@ -323,6 +323,10 @@ pub fn render() -> Option<String> {
 fn describe_counters() {
     // Invoice metrics
     describe_counter!(
+        "ethpayserver_wallet_rotation_alerts_total",
+        "Wallet key rotations that raised an alert, by reason (rate, not_fresh)"
+    );
+    describe_counter!(
         "ethpayserver_invoices_created_total",
         "Total number of invoices created"
     );
